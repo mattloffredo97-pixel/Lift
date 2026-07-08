@@ -17,7 +17,7 @@
     --border:#2E2E35;--border2:#3A3A42;
     --orange:#FF5C1A;--orange-ink:#1A0A00;--orange-bg:#1C1206;--orange-bd:#4A2E0C;
     --volt:#C2FF1F;--volt-ink:#1E2A00;--volt-bg:#11160A;--volt-bd:#2A3A10;
-    --t1:#F5F5F7;--t2:#9A9AA2;--t3:#6A6A72;--t4:#4A4A52;
+    --t1:#F5F5F7;--t2:#9A9AA2;--t3:#6A6A72;--t4:#4A4A52;--cross:#4C9AE0;--cross-ink:#08131F;
     --anton:'Anton',sans-serif;--grotesk:'Space Grotesk',sans-serif;--mono:'Space Mono',monospace;
     --r:6px;
   }
@@ -60,6 +60,16 @@
   .cal .c.pad{background:transparent;border-color:transparent;color:transparent;}
   .cal .c.u{background:var(--orange);border-color:var(--orange);color:var(--orange-ink);font-weight:700;}
   .cal .c.l{background:var(--volt);border-color:var(--volt);color:var(--volt-ink);font-weight:700;}
+  .cal .c.other{background:var(--cross);border-color:var(--cross);color:var(--cross-ink);font-weight:700;}
+  .cal .c.tap{cursor:pointer;}
+  .actrow{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-top:8px;}
+  .actrow .dot{width:9px;height:9px;border-radius:3px;background:var(--cross);flex-shrink:0;}
+  .actrow .lbl2{font-size:13px;color:var(--t1);}
+  .actrow .dt{font-family:var(--mono);font-size:11px;color:var(--t3);margin-left:auto;}
+  .actrow .del{color:var(--t3);padding:4px;}
+  .qchip{padding:8px 13px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);color:var(--t2);font-size:13px;}
+  .modal input[type=date],.modal input[type=text]{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--t1);font-family:var(--grotesk);font-size:15px;padding:11px 12px;margin-top:8px;}
+  .modal input:focus{outline:none;border-color:var(--orange);}
   .cal .c.today{box-shadow:0 0 0 2px var(--t1);}
   .callegend{display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:11px;color:var(--t2);}
   .callegend i{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px;}
@@ -185,7 +195,7 @@ function ic(n){return `<svg class="svi" viewBox="0 0 24 24" fill="none" stroke="
 let DB=null; const mem={};
 async function rawGet(k){ try{const v=localStorage.getItem(k); if(v!=null) return v;}catch(e){} return mem[k]!=null?mem[k]:null; }
 async function rawSet(k,v){ try{localStorage.setItem(k,v);return;}catch(e){mem[k]=v;} }
-function freshDB(){ return {logs:{}, settings:{units:'lb',timer:true,wtStep:5}}; }
+function freshDB(){ return {logs:{}, activities:[], settings:{units:'lb',timer:true,wtStep:5}}; }
 async function loadDB(){
   const raw=await rawGet(KEY);
   if(raw){ try{DB=JSON.parse(raw);}catch(e){DB=freshDB();} } else DB=freshDB();
@@ -194,6 +204,7 @@ async function loadDB(){
   if(DB.settings.timer==null) DB.settings.timer=true;
   if(DB.settings.wtStep==null) DB.settings.wtStep=5;
   if(!DB.logs) DB.logs={};
+  if(!Array.isArray(DB.activities)) DB.activities=[];
 }
 let saveTimer=null;
 function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>rawSet(KEY,JSON.stringify(DB)),120); }
@@ -247,29 +258,39 @@ function fmtDate(ts){ return new Date(ts).toLocaleDateString(undefined,{month:'s
 function fmtDur(ms){ if(!ms||ms<0) return '—'; const s=Math.round(ms/1000); const m=Math.floor(s/60); if(m>240) return '—'; const h=Math.floor(m/60); return h>0?`${h}h ${m%60}m`:`${m}m`; }
 
 /* ---------- UI state ---------- */
-const UI={screen:'today',view:null,ai:0,swapOpen:false,otherOpen:false,noteOpen:false,importOpen:false,recap:null,progLift:null};
+const UI={screen:'today',view:null,ai:0,swapOpen:false,otherOpen:false,noteOpen:false,importOpen:false,actModal:null,recap:null,progLift:null};
 let restState=null,restInterval=null,sessTimerInt=null;
 
 function statusbar(){ return ''; }
 
 /* ---------- TODAY ---------- */
 function isComplete(){ return nextSession()===null; }
+function parseLocalDate(s){ const p=String(s).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+function activityOn(dateStr){ return (DB.activities||[]).filter(a=>a.date===dateStr); }
+function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function cal30(){
   const today=new Date(); today.setHours(0,0,0,0);
   const byDate={};
   Object.values(DB.logs).forEach(l=>{ if(l.completedAt){ const d=new Date(l.completedAt); d.setHours(0,0,0,0); byDate[+d]=l.type; } });
+  const actDate={}; (DB.activities||[]).forEach(a=>{ const d=parseLocalDate(a.date); d.setHours(0,0,0,0); actDate[+d]=true; });
   const start=new Date(today); start.setDate(start.getDate()-29);            // 30-day window
   const gridStart=new Date(start); gridStart.setDate(gridStart.getDate()-gridStart.getDay()); // back to Sunday
   const wdH=['S','M','T','W','T','F','S'].map(x=>`<div class="h">${x}</div>`).join('');
   let cells='';
   for(let d=new Date(gridStart); d<=today; d.setDate(d.getDate()+1)){
-    const inWindow=d>=start; const type=byDate[+d]; const isToday=+d===+today;
-    let cls='c'; if(!inWindow) cls+=' pad'; else if(type==='Upper') cls+=' u'; else if(type==='Lower') cls+=' l';
+    const inWindow=d>=start; const type=byDate[+d]; const hasAct=actDate[+d]; const isToday=+d===+today;
+    let cls='c'; let tappable=false;
+    if(!inWindow) cls+=' pad';
+    else if(type==='Upper') cls+=' u';
+    else if(type==='Lower') cls+=' l';
+    else if(hasAct){ cls+=' other tap'; tappable=true; }
+    else { cls+=' tap'; tappable=true; }  // empty in-window day: tap to log an activity
     if(isToday) cls+=' today';
-    cells+=`<div class="${cls}">${inWindow?d.getDate():''}</div>`;
+    const ds=ymd(d);
+    cells+=`<div class="${cls}" ${tappable&&inWindow?`data-act="viewact" data-date="${ds}"`:''}>${inWindow?d.getDate():''}</div>`;
   }
   return `<div class="cal">${wdH}${cells}</div>
-    <div class="callegend"><span><i style="background:var(--orange)"></i>Upper</span><span><i style="background:var(--volt)"></i>Lower</span></div>`;
+    <div class="callegend"><span><i style="background:var(--orange)"></i>Upper</span><span><i style="background:var(--volt)"></i>Lower</span><span><i style="background:var(--cross)"></i>Other</span></div>`;
 }
 function screenToday(){
   const ns=nextSession();
@@ -303,8 +324,20 @@ function screenToday(){
     <div class="pad" style="margin-top:6px;"><div class="meter"><i style="width:${progPct}%;background:var(--orange)"></i></div></div>
     <div class="pad" style="margin-top:18px;">${hero}</div>
     <div class="pad" style="margin-top:24px;"><div class="eyebrow" style="margin-bottom:11px;">Last 30 days</div>${cal30()}
-      <div class="dim" style="font-size:11px;margin-top:12px;line-height:1.5;">Advances by sessions you finish, not the calendar. Do days in any order from Program.</div></div>`;
+      <button class="btn-ghost" style="margin-top:16px;" data-act="actopen">${ic('plus')} Log another activity</button>
+      ${recentActivities()}
+      <div class="dim" style="font-size:11px;margin-top:14px;line-height:1.5;">Tap any empty day to log a run, class, or sport. Program advances by Upper/Lower sessions you finish, not the calendar.</div></div>`;
 }
+function recentActivities(){
+  const acts=(DB.activities||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  if(!acts.length) return '';
+  const rows=acts.map(a=>`<div class="actrow"><span class="dot"></span>
+    <span class="lbl2">${esc(a.label)}${a.note?` <span class="dim" style="font-size:12px;">· ${esc(a.note)}</span>`:''}</span>
+    <span class="dt">${esc(fmtActDate(a.date))}</span>
+    <button class="del" data-act="actdelete" data-id="${esc(a.id)}">${ic('trash')}</button></div>`).join('');
+  return `<div style="margin-top:14px;"><div class="eyebrow" style="margin-bottom:2px;">Other activities</div>${rows}</div>`;
+}
+function fmtActDate(s){ const d=parseLocalDate(s); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
 
 /* ---------- OVERVIEW ---------- */
 function screenOverview(){
@@ -550,6 +583,23 @@ function importModal(){ return `<div class="overlay"><div class="modal"><div cla
     <textarea id="importText" placeholder="Paste your backup here…"></textarea>
     <div style="display:flex;gap:9px;margin-top:12px;"><button class="btn-ghost" data-act="importcancel">Cancel</button>
     <button class="btn-primary" style="font-size:14px;padding:13px;" data-act="importsave">Restore</button></div></div></div>`; }
+function activityModal(){ const m=UI.actModal; if(!m) return '';
+  const quick=['Run','Cardio','Sport','Mobility','Other'];
+  const existing=activityOn(m.date);
+  return `<div class="overlay"><div class="modal"><div class="anton" style="font-size:18px;">${m.editId?'Edit activity':'Log activity'}</div>
+    <div class="dim" style="font-size:12px;margin-top:6px;line-height:1.5;">Marks the day as trained without touching your Upper/Lower program or its stats.</div>
+    <label class="eyebrow" style="display:block;margin-top:14px;">Date</label>
+    <input type="date" id="actDate" value="${esc(m.date)}">
+    <label class="eyebrow" style="display:block;margin-top:14px;">What did you do?</label>
+    <input type="text" id="actLabel" placeholder="e.g. 5-mile run" value="${esc(m.label||'')}">
+    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;">${quick.map(q=>`<button class="qchip" data-act="actlabel" data-label="${q}">${q}</button>`).join('')}</div>
+    <label class="eyebrow" style="display:block;margin-top:14px;">Note (optional)</label>
+    <input type="text" id="actNote" placeholder="how it felt, distance, time…" value="${esc(m.note||'')}">
+    <div style="display:flex;gap:9px;margin-top:16px;"><button class="btn-ghost" data-act="actcancel">Cancel</button>
+    <button class="btn-primary" style="font-size:14px;padding:13px;" data-act="actsave">${m.editId?'Save':'Add'}</button></div>
+    ${m.editId?`<button class="btn-ghost" style="margin-top:9px;color:var(--orange);border-color:var(--orange-bd);" data-act="actdelete" data-id="${esc(m.editId)}">${ic('trash')} Delete this activity</button>`:''}
+    ${!m.editId&&existing.length?`<div class="dim" style="font-size:11px;margin-top:10px;text-align:center;">Already logged that day: ${existing.map(a=>esc(a.label)).join(', ')}</div>`:''}
+  </div></div>`; }
 function tabbar(){ const t=(id,icon,lbl)=>`<button class="tab ${UI.screen===id?'on':''}" data-act="tab" data-tab="${id}">${ic(icon)}${lbl}</button>`;
   return `<div class="tabbar">${t('today','home','Today')}${t('program','list-check','Program')}${t('progress','chart-line','Progress')}${t('settings','settings','Settings')}</div>`; }
 function render(){
@@ -557,7 +607,7 @@ function render(){
   switch(UI.screen){ case 'today':body=screenToday();break; case 'overview':body=screenOverview();break; case 'log':body=screenLog();break;
     case 'recap':body=screenRecap();break; case 'program':body=screenProgram();break; case 'progress':body=screenProgress();break; case 'settings':body=screenSettings();break; }
   const showTabs=['today','program','progress','settings'].includes(UI.screen);
-  app.innerHTML=body+(showTabs?tabbar():'')+(UI.importOpen?importModal():'');
+  app.innerHTML=body+(showTabs?tabbar():'')+(UI.importOpen?importModal():'')+(UI.actModal?activityModal():'');
   app.style.paddingBottom=showTabs?'82px':'24px';
   if(UI.screen==='log'){ mountRest(); startSessionTimer(); } else stopSessionTimer();
   if(UI.screen==='progress'){ const on=document.querySelector('#liftSeg .segbtn.on'); if(on&&on.scrollIntoView) try{on.scrollIntoView({block:'nearest',inline:'center'});}catch(e){} }
@@ -632,8 +682,20 @@ document.addEventListener('click',e=>{
   if(act==='wtstep'){ const opts=[2.5,5,10]; DB.settings.wtStep=opts[(opts.indexOf(DB.settings.wtStep)+1)%opts.length]; save(); render(); return; }
   if(act==='toggletimer'){ DB.settings.timer=!DB.settings.timer; save(); render(); return; }
   if(act==='importopen'){ UI.importOpen=true; render(); return; }
+  if(act==='actopen'){ UI.actModal={date:ymd(new Date()),label:'',note:'',editId:null}; render(); return; }
+  if(act==='viewact'){ const ds=el.dataset.date; const ex=activityOn(ds)[0];
+    UI.actModal=ex?{date:ex.date,label:ex.label,note:ex.note||'',editId:ex.id}:{date:ds,label:'',note:'',editId:null}; render(); return; }
+  if(act==='actlabel'){ const inp=document.getElementById('actLabel'); if(inp){ inp.value=el.dataset.label; inp.focus(); } return; }
+  if(act==='actcancel'){ UI.actModal=null; render(); return; }
+  if(act==='actsave'){ const dt=document.getElementById('actDate').value; const lb=document.getElementById('actLabel').value.trim(); const nt=document.getElementById('actNote').value.trim();
+    if(!dt){ toast('Pick a date'); return; } if(!lb){ toast('Add what you did'); return; }
+    const m=UI.actModal;
+    if(m.editId){ const a=DB.activities.find(x=>x.id===m.editId); if(a){ a.date=dt; a.label=lb; a.note=nt; } }
+    else DB.activities.push({id:'a'+Date.now()+Math.floor(Math.random()*1000),date:dt,label:lb,note:nt});
+    UI.actModal=null; save(); render(); toast(m.editId?'Activity updated':'Activity logged'); return; }
+  if(act==='actdelete'){ const id=el.dataset.id; if(confirm('Delete this activity?')){ DB.activities=DB.activities.filter(x=>x.id!==id); UI.actModal=null; save(); render(); toast('Activity deleted'); } return; }
   if(act==='importcancel'){ UI.importOpen=false; render(); return; }
-  if(act==='importsave'){ const t=document.getElementById('importText'); try{ const p=JSON.parse(t.value); if(!p||typeof p!=='object'||!p.logs) throw 0; DB=p; if(!DB.settings)DB.settings={units:'lb',timer:true,wtStep:5}; if(DB.settings.wtStep==null)DB.settings.wtStep=5; UI.importOpen=false; save(); UI.screen='today'; render(); toast('Backup restored'); }catch(err){ toast('That does not look like a valid backup'); } return; }
+  if(act==='importsave'){ const t=document.getElementById('importText'); try{ const p=JSON.parse(t.value); if(!p||typeof p!=='object'||!p.logs) throw 0; DB=p; if(!DB.settings)DB.settings={units:'lb',timer:true,wtStep:5}; if(DB.settings.wtStep==null)DB.settings.wtStep=5; if(!Array.isArray(DB.activities))DB.activities=[]; UI.importOpen=false; save(); UI.screen='today'; render(); toast('Backup restored'); }catch(err){ toast('That does not look like a valid backup'); } return; }
   if(act==='export'){ const data=JSON.stringify(DB,null,2); if(navigator.clipboard){ navigator.clipboard.writeText(data).then(()=>toast('Copied your data to clipboard')).catch(()=>fallbackExport(data)); } else fallbackExport(data); return; }
   if(act==='reset'){ if(confirm('Erase ALL logged sets and progress? This cannot be undone.')){ DB=freshDB(); save(); UI.screen='today'; render(); toast('Data reset'); } return; }
 });
