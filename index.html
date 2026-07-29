@@ -153,7 +153,7 @@
   .bigfield{display:flex;align-items:center;background:var(--surface3);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
   .bigstep{width:36px;height:50px;display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:18px;background:rgba(255,255,255,.03);flex-shrink:0;}
   .bigstep:active{background:var(--orange);color:var(--orange-ink);}
-  .biginput{flex:1;min-width:0;text-align:center;font-family:var(--mono);font-size:24px;color:var(--t1);background:transparent;border:none;outline:none;width:100%;padding:9px 0;}
+  .biginput{flex:1;min-width:0;text-align:center;font-family:var(--mono);font-size:26px;color:var(--t1);background:transparent;border:none;outline:none;width:100%;padding:14px 0;}
   .biginput::placeholder{color:var(--t4);font-size:14px;font-family:var(--mono);}
   .midx{height:50px;display:flex;align-items:center;color:var(--t4);font-family:var(--mono);font-size:15px;flex-shrink:0;}
   .acopy{display:flex;justify-content:center;margin-top:10px;}
@@ -369,11 +369,9 @@ function screenOverview(){
 }
 
 /* ---------- LOGGING ---------- */
-function bigField(fld,i,s,val,ph,mode){ // mode 'decimal' or 'numeric'
+function bigField(fld,i,s,val,ph,mode){ // tap-to-type, numeric keypad
   return `<div class="bigfield">
-    <button class="bigstep" data-act="step" data-fld="${fld}" data-i="${i}" data-s="${s}" data-dir="-1">${ic('minus')}</button>
     <input class="sinput biginput" data-fld="${fld}" data-i="${i}" data-s="${s}" inputmode="${mode}" placeholder="${ph!=null?ph:''}" value="${val!==''?val:''}">
-    <button class="bigstep" data-act="step" data-fld="${fld}" data-i="${i}" data-s="${s}" data-dir="1">${ic('plus')}</button>
   </div>`;
 }
 function screenLog(){
@@ -568,7 +566,6 @@ function screenSettings(){ const s=DB.settings;
   return `${statusbar()}<div class="pad" style="padding-top:6px;"><div class="anton" style="font-size:24px;">Settings</div></div>
     <div class="pad" style="margin-top:14px;">
       <div class="ex-row" data-act="units"><span class="ex-name">Weight units</span><span class="mono" style="color:var(--orange);">${s.units.toUpperCase()}</span></div>
-      <div class="ex-row" style="margin-top:9px;" data-act="wtstep"><span class="ex-name">Weight +/− step</span><span class="mono" style="color:var(--orange);">${s.wtStep}</span></div>
       <div class="ex-row" style="margin-top:9px;" data-act="toggletimer"><span class="ex-name">Auto rest timer</span><span class="mono" style="color:${s.timer?'var(--volt)':'var(--t3)'};">${s.timer?'ON':'OFF'}</span></div>
       <div class="ex-row" style="margin-top:9px;" data-act="export"><span class="ex-name">Export my data</span><span class="dim" style="display:inline-flex;">${ic('copy')}</span></div>
       <div class="ex-row" style="margin-top:9px;" data-act="importopen"><span class="ex-name">Restore from backup</span><span class="dim" style="display:inline-flex;">${ic('history')}</span></div>
