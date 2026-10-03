@@ -176,6 +176,23 @@
   .seg::-webkit-scrollbar{display:none;}
   .segbtn{white-space:nowrap;padding:7px 12px;border-radius:var(--r);background:var(--surface);border:1px solid var(--border);color:var(--t2);font-size:12px;font-weight:500;flex-shrink:0;}
   .segbtn.on{background:var(--orange-bg);border-color:var(--orange);color:var(--orange);}
+  .scard{display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin-top:8px;width:100%;text-align:left;}
+  .scard .nm{font-size:13px;color:var(--t1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .scard .spark{flex-shrink:0;line-height:0;}
+  .scard .rt{text-align:right;flex-shrink:0;min-width:58px;}
+  .scard .e1{font-family:var(--mono);font-size:15px;color:var(--t1);}
+  .scard .delta{font-family:var(--mono);font-size:11px;margin-top:2px;}
+  .delta.up{color:var(--volt);}.delta.down{color:var(--orange);}.delta.flat{color:var(--t3);}
+  .verdict{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--volt);border-radius:var(--r);padding:11px 13px;font-size:13px;color:var(--t1);line-height:1.5;}
+  .verdict.warn{border-left-color:var(--orange);}
+  .mrow{display:flex;align-items:center;gap:10px;margin-top:9px;}
+  .mrow .mn{width:74px;font-size:12px;color:var(--t2);text-align:right;flex-shrink:0;}
+  .mrow .track{flex:1;height:22px;background:var(--surface3);border-radius:4px;overflow:hidden;position:relative;}
+  .mrow .fill{height:100%;border-radius:4px;}
+  .mrow .mv{font-family:var(--mono);font-size:12px;color:var(--t1);width:52px;flex-shrink:0;}
+  .mrow .mv small{color:var(--t3);font-size:9px;letter-spacing:.5px;text-transform:uppercase;display:block;}
+  .bandkey{display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:var(--t2);margin-bottom:10px;}
+  .bandkey i{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:4px;}
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:80;padding:20px;}
   .modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;width:100%;max-width:380px;}
   .modal textarea{width:100%;height:120px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--t1);font-family:var(--mono);font-size:12px;padding:10px;margin-top:10px;resize:none;}
@@ -260,7 +277,7 @@ function fmtDate(ts){ return new Date(ts).toLocaleDateString(undefined,{month:'s
 function fmtDur(ms){ if(!ms||ms<0) return '—'; const s=Math.round(ms/1000); const m=Math.floor(s/60); if(m>240) return '—'; const h=Math.floor(m/60); return h>0?`${h}h ${m%60}m`:`${m}m`; }
 
 /* ---------- UI state ---------- */
-const UI={screen:'today',view:null,ai:0,swapOpen:false,otherOpen:false,noteOpen:false,importOpen:false,actModal:null,recap:null,progLift:null};
+const UI={screen:'today',view:null,ai:0,swapOpen:false,otherOpen:false,noteOpen:false,importOpen:false,actModal:null,recap:null,progLift:null,scoreOpen:null};
 let restState=null,restInterval=null,sessTimerInt=null;
 
 function statusbar(){ return ''; }
@@ -535,32 +552,61 @@ function lineChart(pts){ if(pts.length<2) return `<div class="dim" style="font-s
   return `<svg viewBox="0 0 ${W} ${H}" width="100%">${path?`<path d="${path}" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`:''}${dots}${labels}</svg>`; }
 
 function liftLabel(n){ const m=n.match(/^(.*?)\s*\(([^)]+)\)\s*$/); return m?`${m[1]} · ${m[2]}`:n; }
+function weeksTrainedCount(){ return new Set(completedLogs().map(l=>l.w)).size; }
+function scorecardData(){ const list=[];
+  liftsWithData().forEach(n=>{ const pts=liftHistory(n); if(pts.length>=2){ const first=pts[0].value, cur=pts[pts.length-1].value; const diff=cur-first; const pct=first?diff/first*100:0; list.push({name:n,pts,cur,first,diff,pct,lastTs:pts[pts.length-1].ts}); } });
+  list.sort((a,b)=>b.lastTs-a.lastTs); return list; }
+function muscleWeekly(){ const ms=muscleSets(); const wk=Math.max(1,weeksTrainedCount()); const out={}; Object.keys(ms).forEach(k=>out[k]=ms[k]/wk); return out; }
+function band(avg){ if(avg<6) return {l:'under',c:'var(--orange)'}; if(avg<10) return {l:'maintain',c:'var(--cross)'}; if(avg<=20) return {l:'growth',c:'var(--volt)'}; return {l:'high',c:'var(--volt)'}; }
+function sparkline(pts,w,h){ w=w||70;h=h||24; if(pts.length<2) return ''; const vals=pts.map(p=>p.value); const mn=Math.min(...vals),mx=Math.max(...vals),rng=(mx-mn)||1;
+  const X=i=>i*(w/(pts.length-1)); const Y=v=>h-3-((v-mn)/rng)*(h-6); let dd='';
+  pts.forEach((p,i)=>{ dd+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.value).toFixed(1)+' '; });
+  const up=pts[pts.length-1].value>=pts[0].value;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><path d="${dd}" fill="none" stroke="${up?'var(--volt)':'var(--orange)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`; }
 function screenProgress(){
   const logs=completedLogs();
   if(logs.length<1) return `${statusbar()}<div class="pad" style="padding-top:6px;"><div class="anton" style="font-size:24px;">Progress</div></div>
     <div class="empty">${ic('chart-line')}<div class="anton" style="font-size:18px;color:var(--t2);">No data yet</div><div style="font-size:13px;margin-top:8px;">Log a session and your trends show up here.</div></div>`;
-  const totalSets=logs.reduce((a,l)=>{ const o=dayObj(l.w,l.d); let n=0; for(let i=0;i<o.exercises.length;i++) if(l.ex[i]) n+=l.ex[i].sets.filter(x=>x.done).length; return a+n; },0);
-  const totalVol=logs.reduce((a,l)=>{ const o=dayObj(l.w,l.d); let v=0; for(let i=0;i<o.exercises.length;i++) if(l.ex[i]) l.ex[i].sets.forEach(x=>{ if(x.done) v+=parseFloat(x.wt||0)*parseInt(x.reps||0); }); return a+v; },0);
-  const lifts=liftsWithData(); if(!UI.progLift||!lifts.includes(UI.progLift)) UI.progLift=lifts[0]||null;
-  const seg=lifts.map(n=>`<button class="segbtn ${UI.progLift===n?'on':''}" data-act="pick-lift" data-name="${esc(n)}">${esc(liftLabel(n))}</button>`).join('');
-  const pts=UI.progLift?liftHistory(UI.progLift):[];
+  const totalSessions=logs.length;
+  const weeks=weeksTrainedCount();
+  const curWeek=nextSession()?nextSession().w:12;
+  const thisWeek=logs.filter(l=>l.w===curWeek).length;
+  const avgWk=(totalSessions/Math.max(1,weeks));
+  const sc=scorecardData();
+  const holding=sc.filter(x=>x.pct>=-1.5).length; const falling=sc.length-holding;
+  let verdict,vcls='';
+  if(!sc.length) verdict='Log a lift across two or more sessions to start tracking strength.';
+  else if(falling===0) verdict=`Strength holding — all ${sc.length} tracked ${sc.length===1?'lift is':'lifts are'} up or flat. On a cut, that is the win.`;
+  else { verdict=`${holding} of ${sc.length} lifts up or flat · ${falling} trending down. On a deficit a small dip can be normal — watch recovery and protein if it continues.`; vcls=falling>holding?' warn':''; }
+  // scorecard rows
+  const scRows=sc.length? sc.map(x=>{ const flat=Math.abs(x.pct)<1.5; const cls=flat?'flat':(x.pct>0?'up':'down');
+    const deltaTxt=flat?'flat':`${x.diff>0?'+':'−'}${Math.abs(Math.round(x.diff))}`;
+    return `<button class="scard" data-act="score" data-name="${esc(x.name)}">
+      <span class="nm">${esc(liftLabel(x.name))}</span>
+      <span class="spark">${sparkline(x.pts)}</span>
+      <span class="rt"><div class="e1">${x.cur}</div><div class="delta ${cls}">${deltaTxt}</div></span></button>
+      ${UI.scoreOpen===x.name?`<div class="card" style="padding:14px 10px;margin-top:6px;">${lineChart(x.pts)}</div>`:''}`;
+  }).join('') : `<div class="dim" style="font-size:12px;padding:16px 2px;">No lift has two logged sessions yet. Keep logging and your trends appear here.</div>`;
+  // muscle weekly with bands
+  const mw=muscleWeekly(); const mEntries=Object.entries(mw).sort((a,b)=>b[1]-a[1]);
+  const mRows=mEntries.map(([k,v])=>{ const b=band(v); const pct=Math.min(100,v/20*100);
+    return `<div class="mrow"><span class="mn">${k}</span>
+      <div class="track"><div class="fill" style="width:${pct}%;background:${b.c};"></div></div>
+      <span class="mv">${v.toFixed(1)}<small>${b.l}</small></span></div>`; }).join('');
   return `${statusbar()}
     <div class="pad" style="padding-top:6px;"><div class="anton" style="font-size:24px;">Progress</div>
-    <div class="mono dim" style="font-size:12px;margin-top:4px;">${logs.length} SESSIONS LOGGED</div></div>
-    <div class="pad" style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;">
-      <div class="tile" style="padding:12px;"><div class="big" style="font-size:22px;">${logs.length}</div><div class="lbl">Sessions</div></div>
-      <div class="tile" style="padding:12px;"><div class="big" style="font-size:22px;">${totalSets}</div><div class="lbl">Hard sets</div></div>
-      <div class="tile" style="padding:12px;"><div class="big" style="font-size:19px;">${Math.round(totalVol/1000)}k</div><div class="lbl">Lb moved</div></div></div>
-    <div class="pad" style="margin-top:22px;"><div class="eyebrow" style="margin-bottom:4px;">Est. 1RM trend</div>
-      <div class="dim" style="font-size:11px;margin-bottom:10px;">Your top set each session, Epley formula.</div>
-      <div class="seg" id="liftSeg">${seg}</div>
-      <div class="card" style="padding:14px 10px;margin-top:10px;">${lineChart(pts)}</div></div>
-    <div class="pad" style="margin-top:24px;"><div class="eyebrow" style="margin-bottom:4px;">Weekly hard sets</div>
-      <div class="dim" style="font-size:11px;margin-bottom:8px;">Total working sets per week — are you holding volume through the cut?</div>
-      <div class="card" style="padding:12px;overflow-x:auto;">${barV(weeklySets(),'var(--orange)')}</div></div>
-    <div class="pad" style="margin-top:24px;margin-bottom:10px;"><div class="eyebrow" style="margin-bottom:4px;">Sets per muscle group</div>
-      <div class="dim" style="font-size:11px;margin-bottom:8px;">This cycle so far. Jeff's landmark is roughly 10–20 hard sets per muscle per week.</div>
-      <div class="card" style="padding:14px;">${barH(muscleSets())}</div></div>`;
+    <div class="mono dim" style="font-size:12px;margin-top:4px;">${totalSessions} SESSIONS · ${weeks} WEEK${weeks===1?'':'S'} TRAINED</div></div>
+    <div class="pad" style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+      <div class="tile" style="padding:13px;"><div class="big" style="font-size:22px;">${thisWeek}<span style="font-size:15px;color:var(--t3);">/4</span></div><div class="lbl">This week</div></div>
+      <div class="tile" style="padding:13px;"><div class="big" style="font-size:22px;">${avgWk.toFixed(1)}</div><div class="lbl">Avg sessions / wk</div></div></div>
+    <div class="pad" style="margin-top:14px;"><div class="verdict${vcls}">${verdict}</div></div>
+    <div class="pad" style="margin-top:24px;"><div class="eyebrow" style="margin-bottom:4px;">Strength scorecard</div>
+      <div class="dim" style="font-size:11px;margin-bottom:6px;">Est. 1RM and its change since this lift's first logged session. Tap a lift for the full trend.</div>
+      ${scRows}</div>
+    <div class="pad" style="margin-top:26px;margin-bottom:12px;"><div class="eyebrow" style="margin-bottom:6px;">Sets per muscle · weekly average</div>
+      <div class="dim" style="font-size:11px;margin-bottom:9px;">On a cut you hold muscle at roughly 6–10 sets/week; 10+ builds. Bands flag where you are.</div>
+      <div class="bandkey"><span><i style="background:var(--orange)"></i>Under 6</span><span><i style="background:var(--cross)"></i>Maintain 6–10</span><span><i style="background:var(--volt)"></i>Growth 10+</span></div>
+      <div class="card" style="padding:14px;">${mRows}</div></div>`;
 }
 
 /* ---------- SETTINGS ---------- */
@@ -609,7 +655,6 @@ function render(){
   app.innerHTML=body+(showTabs?tabbar():'')+(UI.importOpen?importModal():'')+(UI.actModal?activityModal():'')+restBar();
   app.style.paddingBottom=showTabs?'82px':'24px';
   if(UI.screen==='log'){ startSessionTimer(); } else stopSessionTimer();
-  if(UI.screen==='progress'){ const on=document.querySelector('#liftSeg .segbtn.on'); if(on&&on.scrollIntoView) try{on.scrollIntoView({block:'nearest',inline:'center'});}catch(e){} }
 }
 
 /* ---------- session timer ---------- */
@@ -683,7 +728,7 @@ document.addEventListener('click',e=>{
   if(act==='recapdone'){ UI.recap=null; UI.screen='today'; UI.view=null; render(); window.scrollTo(0,0); return; }
   if(act==='restart'){ if(confirm('Start a fresh 12-week cycle? Your logged history stays saved for reference, but the program resets to Week 1.')){ Object.keys(DB.logs).forEach(k=>{ DB.logs[k]._arch=true; }); DB.logs={}; save(); UI.screen='today'; render(); } return; }
 
-  if(act==='pick-lift'){ UI.progLift=el.dataset.name; render(); return; }
+  if(act==='score'){ const n=el.dataset.name; UI.scoreOpen=(UI.scoreOpen===n?null:n); render(); return; }
   if(act==='units'){ DB.settings.units=DB.settings.units==='lb'?'kg':'lb'; save(); render(); return; }
   if(act==='wtstep'){ const opts=[2.5,5,10]; DB.settings.wtStep=opts[(opts.indexOf(DB.settings.wtStep)+1)%opts.length]; save(); render(); return; }
   if(act==='toggletimer'){ DB.settings.timer=!DB.settings.timer; save(); render(); return; }
