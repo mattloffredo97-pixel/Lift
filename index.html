@@ -122,6 +122,8 @@
   .ring{width:40px;height:40px;flex-shrink:0;transform:rotate(-90deg);}
   .ring circle{fill:none;stroke-width:4;}
   .ring .bg{stroke:var(--orange-bd);}.ring .fg{stroke:var(--orange);stroke-linecap:round;transition:stroke-dashoffset 1s linear;}
+  .restfloat{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 92px);transform:translateX(-50%);width:calc(100% - 28px);max-width:412px;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--orange-bd);border-radius:10px;padding:12px 14px;z-index:55;box-shadow:0 12px 36px rgba(0,0,0,.6);}
+  .restfloat .rskip{background:transparent;border:1px solid var(--orange-bd);color:var(--orange);border-radius:var(--r);padding:9px 13px;font-size:13px;display:flex;align-items:center;gap:5px;}
   .note{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;margin-top:10px;font-size:13px;color:var(--t2);line-height:1.5;}
   .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:13px;padding:6px 11px;border-radius:var(--r);}
   .pill.warm{background:var(--surface2);color:var(--t1);}
@@ -440,7 +442,7 @@ function screenLog(){
       <div class="setlbl eyebrow" style="margin:16px 0 0;">Working sets</div>
       ${rows}
       ${e.dropset?`<div class="dim" style="font-size:11px;margin-top:8px;line-height:1.4;">${ic('arrow-down')} Last set: drop ~50% and rep out again.</div>`:''}
-      <div id="restMount"></div>
+
       <div style="margin-top:16px;">
         ${nx>=0?`<button class="btn-primary" data-act="goto" data-i="${nx}">Next ${ic('chevron-right')}</button>`
           :`<button class="btn-primary ${allSettled?'volt':''}" data-act="finish">${ic('flag-check')} Finish session</button>`}
@@ -604,9 +606,9 @@ function render(){
   switch(UI.screen){ case 'today':body=screenToday();break; case 'overview':body=screenOverview();break; case 'log':body=screenLog();break;
     case 'recap':body=screenRecap();break; case 'program':body=screenProgram();break; case 'progress':body=screenProgress();break; case 'settings':body=screenSettings();break; }
   const showTabs=['today','program','progress','settings'].includes(UI.screen);
-  app.innerHTML=body+(showTabs?tabbar():'')+(UI.importOpen?importModal():'')+(UI.actModal?activityModal():'');
+  app.innerHTML=body+(showTabs?tabbar():'')+(UI.importOpen?importModal():'')+(UI.actModal?activityModal():'')+restBar();
   app.style.paddingBottom=showTabs?'82px':'24px';
-  if(UI.screen==='log'){ mountRest(); startSessionTimer(); } else stopSessionTimer();
+  if(UI.screen==='log'){ startSessionTimer(); } else stopSessionTimer();
   if(UI.screen==='progress'){ const on=document.querySelector('#liftSeg .segbtn.on'); if(on&&on.scrollIntoView) try{on.scrollIntoView({block:'nearest',inline:'center'});}catch(e){} }
 }
 
@@ -616,19 +618,23 @@ function startSessionTimer(){ stopSessionTimer(); const {w,d}=UI.view; const l=D
   tick(); sessTimerInt=setInterval(tick,1000); }
 function stopSessionTimer(){ if(sessTimerInt){clearInterval(sessTimerInt);sessTimerInt=null;} }
 
-/* ---------- rest timer ---------- */
-function mountRest(){ const m=document.getElementById('restMount'); if(!m) return; if(!restState){m.innerHTML='';return;} const C=2*Math.PI*18;
-  m.innerHTML=`<div class="restbar"><svg class="ring" viewBox="0 0 44 44"><circle class="bg" cx="22" cy="22" r="18"></circle><circle class="fg" id="restFg" cx="22" cy="22" r="18" stroke-dasharray="${C}" stroke-dashoffset="0"></circle></svg>
-    <div><div class="eyebrow" style="color:var(--orange);">Resting</div><div class="anton" id="restNum" style="font-size:20px;margin-top:2px;">0:00</div></div>
-    <div style="flex:1"></div><button class="swap-opt" style="margin:0;width:auto;background:transparent;border-color:var(--orange-bd);" data-act="restskip">Skip ${ic('player-skip-forward')}</button></div>`;
-  paintRest(); }
+/* ---------- rest timer (floating, persists across screens & app backgrounding) ---------- */
+const REST_KEY="essentials4x_rest";
+function restBar(){ if(!restState) return ''; const C=2*Math.PI*18;
+  const left=Math.max(0,Math.round((restState.end-Date.now())/1000)); const off=C*(1-left/restState.total);
+  return `<div class="restfloat"><svg class="ring" viewBox="0 0 44 44"><circle class="bg" cx="22" cy="22" r="18"></circle><circle class="fg" id="restFg" cx="22" cy="22" r="18" stroke-dasharray="${C}" stroke-dashoffset="${off}"></circle></svg>
+    <div><div class="eyebrow" style="color:var(--orange);">Resting</div><div class="anton" id="restNum" style="font-size:22px;margin-top:2px;">${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}</div></div>
+    <div style="flex:1"></div><button class="rskip" data-act="restskip">Skip ${ic('player-skip-forward')}</button></div>`; }
 function paintRest(){ if(!restState) return; const num=document.getElementById('restNum'),fg=document.getElementById('restFg');
   const left=Math.max(0,Math.round((restState.end-Date.now())/1000));
   if(num) num.textContent=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
   if(fg){ const C=2*Math.PI*18; fg.style.strokeDashoffset=C*(1-left/restState.total); }
   if(left<=0) stopRest(true); }
-function startRest(sec){ if(!DB.settings.timer||sec<=0) return; restState={end:Date.now()+sec*1000,total:sec}; mountRest(); clearInterval(restInterval); restInterval=setInterval(paintRest,250); }
-function stopRest(buzz){ clearInterval(restInterval); restInterval=null; restState=null; if(buzz&&navigator.vibrate) try{navigator.vibrate(180);}catch(e){} const m=document.getElementById('restMount'); if(m) m.innerHTML=''; }
+function ensureRestTick(){ clearInterval(restInterval); restInterval=setInterval(paintRest,250); }
+function persistRest(){ try{ if(restState) localStorage.setItem(REST_KEY,JSON.stringify(restState)); }catch(e){} }
+function resumeRest(){ try{ const r=localStorage.getItem(REST_KEY); if(r){ const o=JSON.parse(r); if(o&&o.end>Date.now()){ restState=o; ensureRestTick(); } else localStorage.removeItem(REST_KEY); } }catch(e){} }
+function startRest(sec){ if(!DB.settings.timer||sec<=0) return; restState={end:Date.now()+sec*1000,total:sec}; persistRest(); render(); ensureRestTick(); }
+function stopRest(buzz){ clearInterval(restInterval); restInterval=null; const was=!!restState; restState=null; try{localStorage.removeItem(REST_KEY);}catch(e){} if(buzz&&navigator.vibrate) try{navigator.vibrate([120,60,120]);}catch(e){} if(was) render(); }
 
 /* ---------- toast ---------- */
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t);
@@ -639,11 +645,14 @@ function syncInputs(){ if(UI.screen!=='log') return; const {w,d}=UI.view; const 
   document.querySelectorAll('#app .sinput[data-fld]').forEach(inp=>{ const s=+inp.dataset.s; if(st.sets[s]) st.sets[s][inp.dataset.fld]=inp.value.trim(); });
   st.sets.forEach(x=>{ if(!x.done && x.wt!=='' && x.reps!=='') x.done=true; }); }
 function markStart(l){ if(!l.startedAt) l.startedAt=Date.now(); }
+function syncSet(w,d,i,s){ const st=exState(w,d,i); if(!st.sets[s]) return;
+  const q=f=>document.querySelector(`#app .sinput[data-fld="${f}"][data-i="${i}"][data-s="${s}"]`);
+  const wi=q('wt'), ri=q('reps'); if(wi) st.sets[s].wt=wi.value.trim(); if(ri) st.sets[s].reps=ri.value.trim(); }
 function autoCheck(w,d,i,s,rest){ const st=exState(w,d,i); const v=st.sets[s]; if(v.wt!==''&&v.reps!==''&&!v.done){ v.done=true; markStart(DB.logs[sk(w,d)]); if(rest) startRest(parseRest(dayObj(w,d).exercises[i].rest)); return true; } return false; }
 
 /* ---------- events ---------- */
 document.addEventListener('input',e=>{ if(e.target.classList.contains('sinput')&&e.target.dataset.fld){ const {w,d}=UI.view; const ex=exState(w,d,UI.ai); const s=+e.target.dataset.s; ex.sets[s][e.target.dataset.fld]=e.target.value.trim(); save(); } });
-document.addEventListener('change',e=>{ if(e.target.classList.contains('sinput')&&e.target.dataset.fld){ const {w,d}=UI.view; const i=UI.ai; const s=+e.target.dataset.s; const ex=exState(w,d,i); ex.sets[s][e.target.dataset.fld]=e.target.value.trim(); if(autoCheck(w,d,i,s,true)){ save(); render(); } else save(); } });
+document.addEventListener('change',e=>{ if(e.target.classList.contains('sinput')&&e.target.dataset.fld){ const {w,d}=UI.view; const i=UI.ai; const s=+e.target.dataset.s; syncSet(w,d,i,s); if(autoCheck(w,d,i,s,true)){ save(); render(); } else save(); } });
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]'); if(!el) return; const act=el.dataset.act;
   const W=UI.view?UI.view.w:null, D=UI.view?UI.view.d:null;
@@ -654,7 +663,7 @@ document.addEventListener('click',e=>{
   if(act==='back'){ UI.screen=(UI.screen==='log')?'overview':'today'; render(); window.scrollTo(0,0); return; }
   if(act==='skipday'){ if(confirm('Skip this whole day? It will not count in your charts. You can come back to it later.')){ const l=ensureLog(UI.view.w,UI.view.d); l.skipped=true; l.completedAt=null; save(); UI.screen='today'; UI.view=null; render(); toast('Day skipped'); } return; }
 
-  if(act==='goto'){ syncInputs(); save(); UI.ai=+el.dataset.i; resetEx(); stopRest(); render(); window.scrollTo(0,0); return; }
+  if(act==='goto'){ syncInputs(); save(); UI.ai=+el.dataset.i; resetEx(); render(); window.scrollTo(0,0); return; }
   if(act==='toggleset'){ const i=+el.dataset.i,s=+el.dataset.s; syncInputs(); const st=exState(W,D,i); const set=st.sets[s]; set.done=!set.done;
     if(set.done){ if(set.wt==='')set.wt='0'; if(set.reps==='')set.reps='0'; markStart(DB.logs[sk(W,D)]); save(); render(); startRest(parseRest(dayObj(W,D).exercises[i].rest)); return; } save(); render(); return; }
   if(act==='step'){ syncInputs(); const i=+el.dataset.i,s=+el.dataset.s,fld=el.dataset.fld,dir=+el.dataset.dir; const st=exState(W,D,i); const cur=parseFloat(st.sets[s][fld]||0); const inc=fld==='wt'?DB.settings.wtStep:1; let nv=cur+dir*inc; if(nv<0)nv=0; st.sets[s][fld]=String(fld==='wt'?nv:Math.round(nv)); save(); render(); return; }
@@ -709,5 +718,7 @@ function finishSession(){
 }
 
 /* ---------- boot ---------- */
-(async function(){ await loadDB(); render(); document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&UI.screen==='log') paintRest(); }); })();
+(async function(){ await loadDB(); resumeRest(); render();
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&restState){ if(Date.now()>=restState.end) stopRest(true); else { ensureRestTick(); paintRest(); } } });
+})();
 </script>
